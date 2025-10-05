@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Camera - Multi-Modal Detection</title>
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- TensorFlow.js and models -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@latest"></script>
+    
+    <!-- MediaPipe -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js"></script>
+    
+    <!-- Tesseract.js for OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
+    <!-- Math.js for client-side math -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjs@latest"></script>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h2>Loading AI Models...</h2>
+            <p id="loading-status">Initializing camera...</p>
+        </div>
+    </div>
+
+    <!-- Camera Selection Modal -->
+    <div id="camera-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Select Camera</h2>
+            <div id="camera-list" class="camera-list"></div>
+            <button id="confirm-camera" class="btn btn-primary">Start Camera</button>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="app-container" class="app-container hidden">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>AI Camera</h1>
+            <div class="header-controls">
+                <button id="switch-camera" class="btn btn-secondary" title="Switch Camera">📷</button>
+                <button id="settings-btn" class="btn btn-secondary" title="Settings">⚙️</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Camera Section -->
+            <div class="camera-section">
+                <div class="camera-container">
+                    <video id="camera-preview" autoplay muted playsinline></video>
+                    <canvas id="detection-canvas" class="detection-overlay"></canvas>
+                    
+                    <!-- Detection Status -->
+                    <div id="detection-status" class="detection-status">
+                        <span class="status-text">Ready to detect...</span>
+                    </div>
+                </div>
+
+                <!-- Result Display -->
+                <div id="result-display" class="result-display">
+                    <div id="typewriter-text" class="typewriter-text"></div>
+                </div>
+            </div>
+
+            <!-- Side Panels -->
+            <div class="side-panels">
+                <!-- Text Panel -->
+                <div class="panel text-panel">
+                    <h3>Extracted Text</h3>
+                    <div id="extracted-text" class="panel-content">
+                        <p class="placeholder">Hold up text documents to extract text...</p>
+                    </div>
+                    <div class="panel-actions">
+                        <button id="copy-text" class="btn btn-primary" disabled>Copy Text</button>
+                        <button id="clear-text" class="btn btn-secondary" disabled>Clear</button>
+                    </div>
+                </div>
+
+                <!-- Translation Panel -->
+                <div class="panel translation-panel">
+                    <h3>Translation</h3>
+                    <div class="translation-controls">
+                        <select id="target-language" class="language-select">
+                            <option value="">Select Language...</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="it">Italian</option>
+                            <option value="pt">Portuguese</option>
+                            <option value="zh">Chinese</option>
+                            <option value="ja">Japanese</option>
+                            <option value="ko">Korean</option>
+                            <option value="ar">Arabic</option>
+                            <option value="hi">Hindi</option>
+                            <option value="ru">Russian</option>
+                        </select>
+                        <button id="translate-btn" class="btn btn-primary" disabled>Translate</button>
+                    </div>
+                    <div id="translation-result" class="panel-content">
+                        <p class="placeholder">Translation will appear here...</p>
+                    </div>
+                    <div class="panel-actions">
+                        <button id="copy-translation" class="btn btn-primary" disabled>Copy Translation</button>
+                        <button id="speak-translation" class="btn btn-secondary" disabled>🔊 Speak</button>
+                    </div>
+                </div>
+
+                <!-- Math Panel -->
+                <div class="panel math-panel">
+                    <h3>Math Solutions</h3>
+                    <div id="math-result" class="panel-content">
+                        <p class="placeholder">Show math equations to get solutions...</p>
+                    </div>
+                    <div class="panel-actions">
+                        <button id="copy-math" class="btn btn-primary" disabled>Copy Solution</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Query Input -->
+        <div id="floating-input" class="floating-input">
+            <input type="text" id="query-input" placeholder="Ask me anything about what you're showing..." />
+            <button id="query-submit" class="query-btn">🚀</button>
+        </div>
+
+        <!-- Settings Panel - FIX 1: Removed 'hidden' class -->
+        <div id="settings-panel" class="settings-panel">
+            <div class="settings-content">
+                <h3>Settings</h3>
+                
+                <div class="setting-group">
+                    <label>Detection Sensitivity</label>
+                    <input type="range" id="sensitivity-slider" min="0.3" max="0.9" step="0.1" value="0.6">
+                    <span id="sensitivity-value">0.6</span>
+                </div>
+
+                <div class="setting-group">
+                    <label>Detection Speed (ms)</label>
+                    <input type="range" id="speed-slider" min="500" max="3000" step="100" value="1000">
+                    <span id="speed-value">1000ms</span>
+                </div>
+
+                <div class="setting-group">
+                    <label>Voice Settings</label>
+                    <select id="voice-select" class="voice-select">
+                        <option value="">Default Voice</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label>Voice Speed</label>
+                    <input type="range" id="voice-speed" min="0.5" max="2" step="0.1" value="1">
+                    <span id="voice-speed-value">1.0x</span>
+                </div>
+
+                <div class="settings-actions">
+                    <button id="close-settings" class="btn btn-secondary">Close</button>
+                    <button id="reset-settings" class="btn btn-primary">Reset Defaults</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Canvas for Processing -->
+    <canvas id="processing-canvas" class="hidden"></canvas>
+
+    <!-- Error Messages -->
+    <div id="error-message" class="error-message hidden">
+        <div class="error-content">
+            <h3>Error</h3>
+            <p id="error-text"></p>
+            <button id="dismiss-error" class="btn btn-primary">OK</button>
+        </div>
+    </div>
+
+    <!-- Include main application script -->
+    <script src="app.js"></script>
+</body>
+</html>
